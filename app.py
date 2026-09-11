@@ -31,7 +31,6 @@ q10 = st.checkbox("10. 더 이상 이용하지 않는 웹사이트나 앱의 회
 st.divider()
 
 if st.button("보안 점수 진단하기", type="primary"):
-     (1900~2026년, 1~12월, 1~31일)
     birth_digits = "".join(c for c in birth_date if c.isdigit())
     if len(birth_digits) != 8:
         st.error("✘ 생년월일은 8자리 숫자로 입력해주세요. (예: 20100101)")
