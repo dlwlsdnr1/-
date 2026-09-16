@@ -13,7 +13,7 @@ birth_date = st.text_input("자신의 생년월일 8자리를 입력하세요", 
 phone_number = st.text_input("자신의 전화번호를 입력하세요", placeholder="예: 01012345678")
 password = st.text_input("사용 중인 비밀번호를 입력하세요", type="password")
 
-if st.button("비밀번호 유효성 검사", type="primary"):
+if st.button("기본 정보 유효성 검사", type="primary"):
     birth_digits = "".join(c for c in birth_date if c.isdigit())
     if len(birth_digits) != 8:
         st.error("✘ 생년월일은 8자리 숫자로 입력해주세요. (예: 20100101)")
@@ -24,25 +24,28 @@ if st.button("비밀번호 유효성 검사", type="primary"):
         st.error("✘ 올바른 날짜 범위가 아닙니다. (연도: 1900~2026, 월: 1~12, 일: 1~31)")
         st.stop()
 
+    phone_digits = "".join(c for c in phone_number if c.isdigit())
+    if len(phone_digits) != 11 or not phone_digits.startswith("010"):
+        st.error("✘ 전화번호는 010으로 시작하는 11자리 숫자여야 합니다. (예: 01012345678)")
+        st.warning("전화번호를 다시 설정한 후 이용해주세요.")
+        st.stop()
+
+    phone_middle_last = phone_digits[3:]
+    if phone_middle_last[0] == "0":
+        st.error("✘ 전화번호 010 다음 첫 번째 자리에는 0이 올 수 없습니다.")
+        st.warning("전화번호를 다시 설정한 후 이용해주세요.")
+        st.stop()
+
     password_score = 0
     is_valid = True
 
     birth_blocks = [birth_digits[:4], birth_digits[4:]]
-
-    phone_digits = "".join(c for c in phone_number if c.isdigit())
-    if phone_digits.startswith("010"):
-        phone_digits = phone_digits[3:]
-
-    phone_blocks = []
-    if len(phone_digits) == 8:
-        phone_blocks = [phone_digits[:4], phone_digits[4:]]
-    elif len(phone_digits) >= 4:
-        phone_blocks = [phone_digits[-4:]]
+    phone_blocks = [phone_middle_last[:4], phone_middle_last[4:]]
 
     birth_overlap = any(block in password for block in birth_blocks if block)
     phone_overlap = any(block in password for block in phone_blocks if block)
 
-    st.subheader("비밀번호 보안 검사 결과")
+    st.subheader("기본 정보 및 비밀번호 보안 검사 결과")
 
     if birth_overlap or phone_overlap:
         if birth_overlap:
@@ -87,11 +90,11 @@ if st.button("비밀번호 유효성 검사", type="primary"):
         st.warning("⚠️ 비밀번호 조건 중 일부가 충족되지 않았습니다. 비밀번호를 다시 설정해 주세요.")
         st.stop()
 
-    st.session_state["password_passed"] = True
+    st.session_state["info_passed"] = True
     st.session_state["password_score"] = password_score
-    st.success("비밀번호 검사를 통과했습니다. 아래 2번 항목을 진행하세요.")
+    st.success("모든 기본 정보 및 비밀번호 검사를 통과했습니다. 아래 2번 항목을 진행하세요.")
 
-if st.session_state.get("password_passed", False):
+if st.session_state.get("info_passed", False):
     st.divider()
 
     st.subheader("2. 온라인 개인정보 보호 습관 체크 (실천 중인 항목에 체크하세요)")
