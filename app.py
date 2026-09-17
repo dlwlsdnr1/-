@@ -2,32 +2,25 @@ import string
 import random
 import streamlit as st
 
-# ----------------------------------------------------
-# [추가] 안전한 랜덤 비밀번호 생성 함수
-# ----------------------------------------------------
 def generate_safe_password(length=12):
     """대문자, 소문자, 숫자, 특수문자를 모두 포함하는 랜덤 비밀번호 생성"""
     if length < 8:
         length = 8
         
-    # 각 필수 그룹에서 최소 1글자씩 선택
     char_upper = random.choice(string.ascii_uppercase)
     char_lower = random.choice(string.ascii_lowercase)
     char_digit = random.choice(string.digits)
     char_punct = random.choice(string.punctuation)
-    
-    # 나머지 글자는 모든 문자를 섞어서 무작위 추출
+
     all_chars = string.ascii_letters + string.digits + string.punctuation
     remaining_length = length - 4
     remaining_chars = [random.choice(all_chars) for _ in range(remaining_length)]
     
-    # 생성된 문자들을 섞기
     password_list = [char_upper, char_lower, char_digit, char_punct] + remaining_chars
     random.shuffle(password_list)
     
     return "".join(password_list)
 
-# 페이지 기본 설정
 st.set_page_config(page_title="개인정보 보호 체크 프로그램", page_icon="🔒")
 
 st.title("개인정보 보호 체크 프로그램")
@@ -35,7 +28,6 @@ st.write("사용 중인 비밀번호와 온라인 보안 습관을 종합 점검
 
 st.divider()
 
-# 1. 기본 정보 입력 섹션
 st.subheader("1. 기본 정보 입력")
 birth_date = st.text_input("자신의 생년월일 8자리를 입력하세요", placeholder="예: 20100101")
 phone_number = st.text_input("자신의 전화번호를 입력하세요", placeholder="예: 01012345678")
@@ -122,7 +114,6 @@ if st.button("기본 정보 유효성 검사", type="primary"):
     if not is_valid:
         st.warning("⚠️ 비밀번호 조건 중 일부가 충족되지 않았습니다.")
         
-        # [추가] 조건 미달 시 안전한 비밀번호 추천 기능
         recommended_pw = generate_safe_password(12)
         st.info("💡 **추천 안전 비밀번호 (대소문자 + 숫자 + 특수문자 조합):**")
         st.code(recommended_pw, language="")
@@ -132,7 +123,6 @@ if st.button("기본 정보 유효성 검사", type="primary"):
     st.session_state["password_score"] = password_score
     st.success("모든 기본 정보 및 비밀번호 검사를 통과했습니다. 아래 2번 항목을 진행하세요.")
 
-# 2. 온라인 습관 체크 섹션
 if st.session_state.get("info_passed", False):
     st.divider()
 
