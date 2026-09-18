@@ -4,40 +4,30 @@ import streamlit as st
 import streamlit.components.v1 as components
 from fpdf import FPDF
 
+COMMON_PASSWORDS_TOP10 = [
+    "123456",
+    "admin",
+    "12345678",
+    "123456789",
+    "12345",
+    "password",
+    "Aa123456",
+    "1234567890",
+    "Pass@123",
+    "admin123"
+]
+
 def generate_safe_password(length=12):
     if length < 8:
         length = 8
-    char_upper = random.choice(string.ascii_uppercase)
-    char_lower = random.choice(string.ascii_lowercase)
-    char_digit = random.choice(string.digits)
-    char_punct = random.choice(string.punctuation)
-    
+ 
     all_chars = string.ascii_letters + string.digits + string.punctuation
-    remaining_chars = [random.choice(all_chars) for _ in range(length - 4)]
-    
-    password_list = [char_upper, char_lower, char_digit, char_punct] + remaining_chars
-    random.shuffle(password_list)
-    return "".join(password_list)
+    if length > len(all_chars):
+        length = len(all_chars)
+    return "".join(random.sample(all_chars, length))
 
 
-def play_sound(sound_url):
-    sound_html = f"""
-        <iframe src="{sound_url}" allow="autoplay" style="display:none" id="iframeAudio"></iframe>
-        <audio id="playAudio" autoplay>
-            <source src="{sound_url}" type="audio/mp3">
-        </audio>
-        <script>
-            var audio = document.getElementById("playAudio");
-            audio.volume = 0.7;
-            var playPromise = audio.play();
-            if (playPromise !== undefined) {{
-                playPromise.catch(function(error) {{
-                    console.log("Autoplay caught error:", error);
-                }});
-            }}
-        </script>
-    """
-    components.html(sound_html, height=0)
+
 def create_pdf_report(grade_str, total_score, pass_score, habit_score, guide_text):
     pdf = FPDF()
     pdf.add_page()
@@ -54,7 +44,6 @@ def create_pdf_report(grade_str, total_score, pass_score, habit_score, guide_tex
     
     pdf.cell(200, 10, txt="[ Security Improvement Guide ]", ln=True)
     pdf.set_font("Helvetica", size=10)
-    
     pdf.multi_cell(0, 8, txt=guide_text)
     
     output_res = pdf.output()
@@ -82,6 +71,7 @@ phone_middle_last = phone_digits[3:] if len(phone_digits) >= 11 else ""
 birth_blocks = [birth_digits[:4], birth_digits[4:]] if len(birth_digits) == 8 else []
 phone_blocks = [phone_middle_last[:4], phone_middle_last[4:]] if len(phone_middle_last) == 8 else []
 
+
 cond_length = len(password) >= 8
 cond_digit = any(c.isdigit() for c in password)
 cond_punct = any(c in string.punctuation for c in password)
@@ -91,19 +81,24 @@ birth_overlap = any(b in password for b in birth_blocks if b)
 phone_overlap = any(p in password for p in phone_blocks if p)
 cond_overlap = not (birth_overlap or phone_overlap) if password else False
 
-met_conditions = sum([cond_length, cond_digit, cond_punct, cond_upper, cond_overlap])
+
+cond_unique = (len(password) == len(set(password))) if password else False
+
+met_conditions = sum([cond_length, cond_digit, cond_punct, cond_upper, cond_overlap, cond_unique])
 
 if password:
     st.markdown("#### 📊 비밀번호 실시간 복잡도")
-    progress_val = met_conditions / 5.0
+    progress_val = met_conditions / 6.0
     st.progress(progress_val)
     
-    if met_conditions <= 2:
-        st.error(f"🔴 현재 상태: **위험** (충족 조건: {met_conditions}/5개)")
-    elif met_conditions <= 4:
-        st.warning(f"🟡 현재 상태: **보통** (충족 조건: {met_conditions}/5개)")
+    if password in COMMON_PASSWORDS_TOP10:
+        st.error("🚨 **위험:** 가장 많이 사용되는 해킹 위험 비밀번호 Top 10에 해당합니다. 즉시 재설정해주세요!")
+    elif met_conditions <= 2:
+        st.error(f"🔴 현재 상태: **위험** (충족 조건: {met_conditions}/6개)")
+    elif met_conditions <= 5:
+        st.warning(f"🟡 현재 상태: **보통** (충족 조건: {met_conditions}/6개)")
     else:
-        st.success(f"🟢 현재 상태: **안전** (충족 조건: 5/5개 모두 완료)")
+        st.success(f"🟢 현재 상태: **안전** (충족 조건: 6/6개 모두 완료)")
 
 st.write("")
 
@@ -125,6 +120,13 @@ if st.button("기본 정보 유효성 검사", type="primary"):
         st.error("✘ 전화번호 010 다음 첫 번째 자리에는 0이 올 수 없습니다.")
         st.stop()
 
+    if password in COMMON_PASSWORDS_TOP10:
+        st.error("✘ 가장 많이 사용되는 해킹 취약 비밀번호 Top 10에 해당합니다. 비밀번호를 재설정해주세요.")
+        recommended_pw = generate_safe_password(12)
+        st.info("💡 **추천 안전 비밀번호:**")
+        st.code(recommended_pw, language="")
+        st.stop()
+
     if birth_overlap or phone_overlap:
         st.error("✘ 비밀번호에 생년월일이나 전화번호와 중복되는 숫자가 포함되어 있습니다.")
         recommended_pw = generate_safe_password(12)
@@ -132,14 +134,21 @@ if st.button("기본 정보 유효성 검사", type="primary"):
         st.code(recommended_pw, language="")
         st.stop()
 
-    if met_conditions < 5:
-        st.warning("⚠️ 비밀번호 5가지 조건을 모두 충족해야 다음 단계로 진행할 수 있습니다.")
+    if not cond_unique:
+        st.error("✘ 비밀번호 내에 중복된 숫자나 문자가 포함될 수 없습니다.")
         recommended_pw = generate_safe_password(12)
-        st.info("💡 **추천 안전 비밀번호 (대소문자 + 숫자 + 특수문자 조합):**")
+        st.info("💡 **추천 안전 비밀번호 (중복 없음):**")
         st.code(recommended_pw, language="")
         st.stop()
 
-    password_score = met_conditions * 10
+    if met_conditions < 6:
+        st.warning("⚠️ 비밀번호 6가지 조건을 모두 충족해야 다음 단계로 진행할 수 있습니다.")
+        recommended_pw = generate_safe_password(12)
+        st.info("💡 **추천 안전 비밀번호:**")
+        st.code(recommended_pw, language="")
+        st.stop()
+
+    password_score = int((met_conditions / 6.0) * 50)
     st.session_state["info_passed"] = True
     st.session_state["password_score"] = password_score
     st.success("✔ 모든 기본 정보 및 비밀번호 검사를 통과했습니다. 아래 2번 항목으로 이동하세요.")
