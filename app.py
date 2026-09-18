@@ -21,16 +21,7 @@ def generate_safe_password(length=12):
 
 
 def play_sound(sound_url):
-    sound_html = f"""
-        <script>
-        var audio = new Audio("{sound_url}");
-        audio.play().catch(function(error) {{
-            console.log("Autoplay blocked:", error);
-        }});
-        </script>
-    """
-    components.html(sound_html, height=0)
-
+    st.audio(sound_url, format="audio/mp3", autoplay=True)
 def create_pdf_report(grade_str, total_score, pass_score, habit_score, guide_text):
     pdf = FPDF()
     pdf.add_page()
