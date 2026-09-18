@@ -45,9 +45,13 @@ def create_pdf_report(grade_str, total_score, pass_score, habit_score, guide_tex
     
     pdf.cell(200, 10, txt="[ Security Improvement Guide ]", ln=True)
     pdf.set_font("Helvetica", size=10)
+    
     pdf.multi_cell(0, 8, txt=guide_text)
     
-    return bytes(pdf.output())
+    output_res = pdf.output()
+    if isinstance(output_res, str):
+        return output_res.encode('latin-1')
+    return bytes(output_res)
 
 
 st.set_page_config(page_title="개인정보 보호 체크 프로그램", page_icon="🔒")
@@ -167,7 +171,12 @@ if st.session_state.get("info_passed", False):
             grade_str = "1 Grade (Very Safe)"
             st.balloons()
             st.success("🎉 **최종 등급 : 1등급 (매우 안전)**")
-            guide_text = (
+            guide_text_kr = (
+                "훌륭한 보안 의식을 가지고 계십니다! 현재 보안 습관을 지속해 주세요:\n"
+                "- 3개월마다 주기적으로 비밀번호를 변경해 주세요.\n"
+                "- 주요 계정에는 2단계 인증(2FA)을 꼭 유지해 주세요."
+            )
+            guide_text_pdf = (
                 "Excellent security awareness! Maintain current habits:\n"
                 "- Change passwords periodically every 3 months.\n"
                 "- Keep 2-factor authentication active on all vital accounts."
@@ -177,7 +186,12 @@ if st.session_state.get("info_passed", False):
         elif total_score >= 60:
             grade_str = "2 Grade (Safe)"
             st.info("🔵 **최종 등급 : 2등급 (안전)**")
-            guide_text = (
+            guide_text_kr = (
+                "전반적으로 양호한 보안 상태입니다. 몇 가지만 보완해 보세요:\n"
+                "- 소셜 미디어 및 주요 사이트에 2단계 인증을 설정하세요.\n"
+                "- 사용하지 않는 간편 로그인 연동 앱 권한을 정기적으로 정리하세요."
+            )
+            guide_text_pdf = (
                 "Good overall security with minor areas to improve:\n"
                 "- Turn on 2FA (Two-Factor Authentication) for social media.\n"
                 "- Clean up unused OAuth linked app permissions regularly."
@@ -187,7 +201,12 @@ if st.session_state.get("info_passed", False):
         elif total_score >= 40:
             grade_str = "3 Grade (Moderate)"
             st.warning("🟡 **최종 등급 : 3등급 (보통)**")
-            guide_text = (
+            guide_text_kr = (
+                "보안 위험이 일부 감지되었습니다. 아래 조치를 권장합니다:\n"
+                "- 여러 사이트에 동일한 비밀번호를 재사용하지 마세요.\n"
+                "- 암호가 없는 공공 Wi-Fi 환경에서는 금융 거래를 자제해 주세요."
+            )
+            guide_text_pdf = (
                 "Moderate risk detected! Action recommended:\n"
                 "- Stop reusing passwords across multiple online services.\n"
                 "- Avoid logging into sensitive accounts on public Wi-Fi."
@@ -197,7 +216,12 @@ if st.session_state.get("info_passed", False):
         else:
             grade_str = "4-5 Grade (High Risk)"
             st.error("🚨 **최종 등급 : 위험/매우 위험**")
-            guide_text = (
+            guide_text_kr = (
+                "취약한 보안 상태입니다! 즉각적인 조치가 필요합니다:\n"
+                "- 쉬운 비밀번호를 대소문자, 숫자, 특수문자 조합으로 즉시 변경하세요.\n"
+                "- 최신 백신 프로그램을 설치하고 바이러스 정밀 검사를 진행하세요."
+            )
+            guide_text_pdf = (
                 "Urgent action required! High vulnerability:\n"
                 "- Replace weak passwords with complex combinations immediately.\n"
                 "- Install up-to-date antivirus software and run full system scans."
@@ -208,10 +232,10 @@ if st.session_state.get("info_passed", False):
 
         st.markdown("---")
         st.subheader("💡 등급별 맞춤 보안 개선 가이드")
-        st.info(guide_text)
+        st.info(guide_text_kr)
 
         pdf_bytes = create_pdf_report(
-            grade_str, total_score, password_score, habit_score, guide_text
+            grade_str, total_score, password_score, habit_score, guide_text_pdf
         )
         st.download_button(
             label="📄 진단 결과 PDF 리포트 다운로드",
