@@ -21,7 +21,23 @@ def generate_safe_password(length=12):
 
 
 def play_sound(sound_url):
-    st.audio(sound_url, format="audio/mp3", autoplay=True)
+    sound_html = f"""
+        <iframe src="{sound_url}" allow="autoplay" style="display:none" id="iframeAudio"></iframe>
+        <audio id="playAudio" autoplay>
+            <source src="{sound_url}" type="audio/mp3">
+        </audio>
+        <script>
+            var audio = document.getElementById("playAudio");
+            audio.volume = 0.7;
+            var playPromise = audio.play();
+            if (playPromise !== undefined) {{
+                playPromise.catch(function(error) {{
+                    console.log("Autoplay caught error:", error);
+                }});
+            }}
+        </script>
+    """
+    components.html(sound_html, height=0)
 def create_pdf_report(grade_str, total_score, pass_score, habit_score, guide_text):
     pdf = FPDF()
     pdf.add_page()
