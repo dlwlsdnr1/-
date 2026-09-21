@@ -4,29 +4,39 @@ import streamlit as st
 import streamlit.components.v1 as components
 from fpdf import FPDF
 
-COMMON_PASSWORDS_TOP10 = [
-    "123456",
-    "admin",
-    "12345678",
-    "123456789",
-    "12345",
-    "password",
-    "Aa123456",
-    "1234567890",
-    "Pass@123",
-    "admin123"
-]
+# 오디오 재생용 보조 함수
+def play_sound(sound_url):
+    audio_html = f"""
+        <audio autoplay style="display:none;">
+            <source src="{sound_url}" type="audio/ogg">
+        </audio>
+    """
+    components.html(audio_html, height=0)
+
+# 흔히 사용되는 비밀번호 목록
+COMMON_PASSWORDS = list(set([
+    "password", "123456", "12345678", "qwerty", "abc123", "monkey", "1234567",
+    "letmein", "trustno1", "dragon", "baseball", "111111", "iloveyou", "master",
+    "sunshine", "ashley", "bailey", "passw0rd", "shadow", "123123", "654321",
+    "superman", "qazwsx", "michael", "Football", "12345", "1234", "adobe123",
+    "photoshop", "access", "000000", "123456789", "welcome", "1234567890",
+    "1qaz2wsx", "mustang", "696969", "batman", "football", "princess", "login",
+    "solo", "121212", "flower", "sunshine", "hottie", "loveme", "zaq1zaq1",
+    "starwars", "admin", "666666", "hello", "freedom", "whatever",
+    "aa123456", "charlie", "donald", "password1", "qwertyuiop",
+    "lovely", "777777", "888888", "1q2w3e4r", "555555", "123qwe",
+    "!@#$%^&*", "Pass@123", "Aa123456", "admin123"
+]))
 
 def generate_safe_password(length=12):
     if length < 8:
         length = 8
- 
     all_chars = string.ascii_letters + string.digits + string.punctuation
-    if length > len(all_chars):
-        length = len(all_chars)
-    return "".join(random.sample(all_chars, length))
-
-
+    # 무작위 추출 후 연속 3개 중복이 없는지 검증
+    while True:
+        pw = "".join(random.choices(all_chars, k=length))
+        if not any(pw[i] == pw[i+1] == pw[i+2] for i in range(len(pw) - 2)):
+            return pw
 
 def create_pdf_report(grade_str, total_score, pass_score, habit_score, guide_text):
     pdf = FPDF()
@@ -51,7 +61,6 @@ def create_pdf_report(grade_str, total_score, pass_score, habit_score, guide_tex
         return output_res.encode('latin-1')
     return bytes(output_res)
 
-
 st.set_page_config(page_title="개인정보 보호 체크 프로그램", page_icon="🔒")
 st.title("개인정보 보호 체크 프로그램")
 st.write("사용 중인 비밀번호와 온라인 보안 습관을 종합 점검해보세요.")
@@ -71,7 +80,7 @@ phone_middle_last = phone_digits[3:] if len(phone_digits) >= 11 else ""
 birth_blocks = [birth_digits[:4], birth_digits[4:]] if len(birth_digits) == 8 else []
 phone_blocks = [phone_middle_last[:4], phone_middle_last[4:]] if len(phone_middle_last) == 8 else []
 
-
+# 비밀번호 조건 검사
 cond_length = len(password) >= 8
 cond_digit = any(c.isdigit() for c in password)
 cond_punct = any(c in string.punctuation for c in password)
@@ -81,18 +90,32 @@ birth_overlap = any(b in password for b in birth_blocks if b)
 phone_overlap = any(p in password for p in phone_blocks if p)
 cond_overlap = not (birth_overlap or phone_overlap) if password else False
 
+# 동일한 문자가 3개 연속으로 입력되었는지 확인 (3개 이상 연속시 False)
+has_triple_consecutive = any(
+    password[i] == password[i+1] == password[i+2] 
+    for i in range(len(password) - 2)
+) if len(password) >= 3 else False
 
-cond_unique = (len(password) == len(set(password))) if password else False
+cond_no_triple_consecutive = not has_triple_consecutive if password else False
 
-met_conditions = sum([cond_length, cond_digit, cond_punct, cond_upper, cond_overlap, cond_unique])
+met_conditions = sum([
+    cond_length, 
+    cond_digit, 
+    cond_punct, 
+    cond_upper, 
+    cond_overlap, 
+    cond_no_triple_consecutive
+])
 
 if password:
     st.markdown("#### 📊 비밀번호 실시간 복잡도")
     progress_val = met_conditions / 6.0
     st.progress(progress_val)
     
-    if password in COMMON_PASSWORDS_TOP10:
-        st.error("🚨 **위험:** 가장 많이 사용되는 해킹 위험 비밀번호 Top 10에 해당합니다. 즉시 재설정해주세요!")
+    if password in COMMON_PASSWORDS:
+        st.error("🚨 **위험:** 자주 사용되는 취약한 비밀번호 목록에 해당합니다. 즉시 재설정해주세요!")
+    elif has_triple_consecutive:
+        st.error("🚨 **위험:** 동일한 문자가 3개 이상 연속으로 포함되어 있습니다. (예: aaa, 111, !!!)")
     elif met_conditions <= 2:
         st.error(f"🔴 현재 상태: **위험** (충족 조건: {met_conditions}/6개)")
     elif met_conditions <= 5:
@@ -116,12 +139,12 @@ if st.button("기본 정보 유효성 검사", type="primary"):
         st.error("✘ 전화번호는 010으로 시작하는 11자리 숫자여야 합니다.")
         st.stop()
 
-    if phone_middle_last[0] == "0":
+    if phone_middle_last and phone_middle_last[0] == "0":
         st.error("✘ 전화번호 010 다음 첫 번째 자리에는 0이 올 수 없습니다.")
         st.stop()
 
-    if password in COMMON_PASSWORDS_TOP10:
-        st.error("✘ 가장 많이 사용되는 해킹 취약 비밀번호 Top 10에 해당합니다. 비밀번호를 재설정해주세요.")
+    if password in COMMON_PASSWORDS:
+        st.error("✘ 자주 사용되는 해킹 취약 비밀번호에 해당합니다. 비밀번호를 재설정해주세요.")
         recommended_pw = generate_safe_password(12)
         st.info("💡 **추천 안전 비밀번호:**")
         st.code(recommended_pw, language="")
@@ -134,10 +157,10 @@ if st.button("기본 정보 유효성 검사", type="primary"):
         st.code(recommended_pw, language="")
         st.stop()
 
-    if not cond_unique:
-        st.error("✘ 비밀번호 내에 중복된 숫자나 문자가 포함될 수 없습니다.")
+    if has_triple_consecutive:
+        st.error("✘ 동일한 문자가 3개 이상 연속으로 사용할 수 없습니다. (예: aaa, 111 등)")
         recommended_pw = generate_safe_password(12)
-        st.info("💡 **추천 안전 비밀번호 (중복 없음):**")
+        st.info("💡 **추천 안전 비밀번호:**")
         st.code(recommended_pw, language="")
         st.stop()
 
