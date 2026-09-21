@@ -4,7 +4,6 @@ import streamlit as st
 import streamlit.components.v1 as components
 from fpdf import FPDF
 
-# 오디오 재생용 보조 함수
 def play_sound(sound_url):
     audio_html = f"""
         <audio autoplay style="display:none;">
@@ -13,7 +12,6 @@ def play_sound(sound_url):
     """
     components.html(audio_html, height=0)
 
-# 흔히 사용되는 비밀번호 목록
 COMMON_PASSWORDS = list(set([
     "password", "123456", "12345678", "qwerty", "abc123", "monkey", "1234567",
     "letmein", "trustno1", "dragon", "baseball", "111111", "iloveyou", "master",
@@ -31,11 +29,26 @@ COMMON_PASSWORDS = list(set([
 def generate_safe_password(length=12):
     if length < 8:
         length = 8
-    all_chars = string.ascii_letters + string.digits + string.punctuation
-    # 무작위 추출 후 연속 3개 중복이 없는지 검증
+
+    uppercase = string.ascii_uppercase
+    digits = string.digits
+    punctuation = string.punctuation
+    lowercase = string.ascii_lowercase
+    all_chars = uppercase + digits + punctuation + lowercase
+
     while True:
-        pw = "".join(random.choices(all_chars, k=length))
-        if not any(pw[i] == pw[i+1] == pw[i+2] for i in range(len(pw) - 2)):
+        password_chars = [
+            random.choice(uppercase),
+            random.choice(digits),
+            random.choice(punctuation),
+            random.choice(lowercase)
+        ]
+        password_chars += random.choices(all_chars, k=length - 4)
+        random.shuffle(password_chars)
+        pw = "".join(password_chars)
+
+        has_triple = any(pw[i] == pw[i+1] == pw[i+2] for i in range(len(pw) - 2))
+        if not has_triple:
             return pw
 
 def create_pdf_report(grade_str, total_score, pass_score, habit_score, guide_text):
@@ -80,7 +93,6 @@ phone_middle_last = phone_digits[3:] if len(phone_digits) >= 11 else ""
 birth_blocks = [birth_digits[:4], birth_digits[4:]] if len(birth_digits) == 8 else []
 phone_blocks = [phone_middle_last[:4], phone_middle_last[4:]] if len(phone_middle_last) == 8 else []
 
-# 비밀번호 조건 검사
 cond_length = len(password) >= 8
 cond_digit = any(c.isdigit() for c in password)
 cond_punct = any(c in string.punctuation for c in password)
@@ -90,7 +102,6 @@ birth_overlap = any(b in password for b in birth_blocks if b)
 phone_overlap = any(p in password for p in phone_blocks if p)
 cond_overlap = not (birth_overlap or phone_overlap) if password else False
 
-# 동일한 문자가 3개 연속으로 입력되었는지 확인 (3개 이상 연속시 False)
 has_triple_consecutive = any(
     password[i] == password[i+1] == password[i+2] 
     for i in range(len(password) - 2)
