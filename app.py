@@ -93,19 +93,26 @@ QUESTIONS = [
     ),
 ]
 
-ANSWER_OPTIONS = ["선택하세요", "예", "아니요", "모름"]
-PERSONAL_OPTIONS = ["선택하세요", "포함되지 않음", "포함됨", "모름"]
+
+ANSWER_OPTIONS = ["예", "아니요"]
+PERSONAL_OPTIONS = ["포함되지 않음", "포함됨"]
+SPECIALS = string.punctuation
+
+
+def invalidate_password():
+    # 비밀번호나 개인정보 응답이 바뀌면 이전 확인 결과와 최종 결과를 지워요.
+    for key in ("pw_check", "diag_example", "diagnosis", "report_pdf"):
+        st.session_state.pop(key, None)
 
 
 def invalidate_result():
-    # 입력값이 달라지면 이전 점수와 PDF를 폐기합니다.
     st.session_state.pop("diagnosis", None)
     st.session_state.pop("report_pdf", None)
 
 
 def reset_all():
     for key in list(st.session_state.keys()):
-        if key.startswith("diag_") or key in {"diagnosis", "report_pdf"}:
+        if key.startswith("diag_") or key in {"pw_check", "diagnosis", "report_pdf"}:
             del st.session_state[key]
 
 
@@ -114,62 +121,72 @@ def has_triple(text):
 
 
 def evaluate_password(password, personal_status):
-    if not password:
-        length_points = 0
-    elif len(password) >= 16:
-        length_points = 25
-    elif len(password) >= 12:
-        length_points = 20
-    elif len(password) >= 8:
-        length_points = 10
-    else:
-        length_points = 0
-
-    known_weak = bool(password) and password.casefold() in COMMON_PASSWORDS
-    no_triple = bool(password) and not has_triple(password)
-    no_personal = bool(password) and personal_status == "포함되지 않음"
+    """조건 5개 × 10점 = 50점"""
+    has_digit = any(c.isdigit() for c in password)
+    has_upper = any(c.isupper() for c in password)
+    has_special = any(c in SPECIALS for c in password)
     checks = [
-        ("비밀번호 길이", length_points, 25),
-        ("앱의 흔한 비밀번호 목록에 없는지", 10 if password and not known_weak else 0, 10),
-        ("같은 문자가 3번 이상 이어지지 않는지", 5 if no_triple else 0, 5),
-        ("개인정보가 없다고 답했는지", 10 if no_personal else 0, 10),
+        {
+            "label": "8자 이상인가요?",
+            "ok": len(password) >= 8,
+            "tip": "비밀번호를 8자 이상으로 늘려주세요.",
+            "tip_en": "Use at least 8 characters.",
+        },
+        {
+            "label": "같은 문자나 숫자가 3번 이상 이어지지 않나요?",
+            "ok": not has_triple(password),
+            "tip": "aaa, 111처럼 같은 글자가 3번 이상 이어지지 않게 바꿔주세요.",
+            "tip_en": "Avoid the same character three or more times in a row.",
+        },
+        {
+            "label": "이름·생일·전화번호 같은 개인정보가 없나요?",
+            "ok": personal_status == "포함되지 않음",
+            "tip": "이름, 생일, 전화번호처럼 남이 추측하기 쉬운 정보는 빼주세요.",
+            "tip_en": "Remove guessable personal information such as names, birthdays, or phone numbers.",
+        },
+        {
+            "label": "흔한 비밀번호 목록에 없나요?",
+            "ok": password.casefold() not in COMMON_PASSWORDS,
+            "tip": "누구나 많이 쓰는 비밀번호예요. 나만의 비밀번호로 바꿔주세요.",
+            "tip_en": "Replace commonly used passwords with a unique one.",
+        },
+        {
+            "label": "숫자, 대문자, 특수문자가 모두 들어 있나요?",
+            "ok": has_digit and has_upper and has_special,
+            "tip": "숫자, 대문자, 특수문자를 모두 섞어주세요.",
+            "tip_en": "Include numbers, uppercase letters, and special characters.",
+        },
     ]
-    raw_score = sum(item[1] for item in checks)
-    # 흔한 비밀번호는 다른 조건을 만족해도 점수가 높아지지 않도록 제한합니다.
-    score = min(raw_score, 10) if known_weak else raw_score
-    warnings = []
-    actions = []
-    if known_weak:
-        warnings.append("흔히 쓰이는 비밀번호예요. 쉽게 추측될 수 있어 비밀번호 점수는 최대 10점까지만 받을 수 있어요.")
-        actions.append((0, "흔한 비밀번호 대신 나만의 길고 고유한 비밀번호를 만들어보세요.",
-                        "Replace common passwords with long, unique passwords."))
-    if len(password) < 12:
-        warnings.append("비밀번호가 조금 짧아요. 더 길게 만들거나 여러 단어를 조합해보세요.")
-        actions.append((1, "비밀번호를 더 길게 만들어보세요. 이 앱에서는 16자 이상이면 길이 점수를 모두 받을 수 있어요.",
-                        "Use a longer password or passphrase; this educational rubric awards full length points at 16 characters."))
-    elif len(password) < 16:
-        actions.append((3, "비밀번호를 조금 더 길게 만들거나 나만의 암호문구를 사용해보세요.",
-                        "Consider a longer unique password or passphrase."))
-    if password and not no_triple:
-        actions.append((2, "같은 문자가 연달아 반복되는 단순한 패턴은 피해보세요.",
-                        "Avoid simple repeated-character patterns."))
-    if personal_status in {"포함됨", "모름"}:
-        if personal_status == "포함됨":
-            warnings.append("개인정보가 들어 있다고 답했어요. 다른 사람이 추측하기 쉬울 수 있어요.")
-        actions.append((1, "이름이나 생일, 전화번호처럼 추측하기 쉬운 정보는 빼주세요.",
-                        "Check that the password does not contain guessable personal information."))
-    return {"score": score, "checks": checks, "warnings": warnings, "actions": actions}
+    missing = []
+    if not has_digit:
+        missing.append("숫자")
+    if not has_upper:
+        missing.append("대문자")
+    if not has_special:
+        missing.append("특수문자")
+    if missing:
+        checks[4]["tip"] = f"{', '.join(missing)}을(를) 추가해주세요."
+    score = sum(10 for c in checks if c["ok"])
+    return {"score": score, "checks": checks}
 
 
-def generate_example(length=16):
-    # random 대신 암호학적 난수 사용. 예시도 내장 목록과 반복 패턴을 검사합니다.
+def password_level(score):
+    if score == 50:
+        return "안전", "success"
+    if score >= 30:
+        return "주의", "warning"
+    return "위험", "error"
+
+
+def generate_example(length=12):
+    """5가지 조건을 모두 통과하는 추천 비밀번호를 만들어요 (secrets 사용)."""
     alphabet = string.ascii_letters + string.digits + "!@#$%^&*()-_=+"
     while True:
         candidate = "".join(secrets.choice(alphabet) for _ in range(length))
         if (any(c.islower() for c in candidate)
                 and any(c.isupper() for c in candidate)
                 and any(c.isdigit() for c in candidate)
-                and any(c in string.punctuation for c in candidate)
+                and any(c in SPECIALS for c in candidate)
                 and not has_triple(candidate)
                 and candidate.casefold() not in COMMON_PASSWORDS):
             return candidate
@@ -177,7 +194,7 @@ def generate_example(length=16):
 
 def grade_for(score):
     if score >= 80:
-        return "좋은 습관을 잘 지키고 있어요!", "High self-assessment adherence"
+        return "좋은 습관을 잘 지키고 있어요!", "Great habits"
     if score >= 60:
         return "몇 가지만 더 챙겨볼까요?", "Some improvement needed"
     if score >= 40:
@@ -186,7 +203,7 @@ def grade_for(score):
 
 
 def create_pdf_report(result):
-    """Create an in-memory PDF. No passwords are passed to this function."""
+    """점수와 개선 팁만 담은 영문 PDF. 비밀번호는 넣지 않아요."""
     buffer = BytesIO()
     doc = SimpleDocTemplate(
         buffer, pagesize=(210 * mm, 297 * mm),
@@ -202,21 +219,17 @@ def create_pdf_report(result):
     story = []
 
     def add(text, style="ReportBody"):
-        # Escape user-independent strings as well to avoid XML parsing errors.
         story.append(Paragraph(escape(str(text)), styles[style]))
 
     add("My Security Check", "Title")
-    add(f"Created (server time): {result['created_at']}")
+    add(f"Created: {result['created_at']}")
     story.append(Spacer(1, 5 * mm))
     add(f"Total score: {result['total_score']} / 100", "Heading2")
-    add(f"Test password: {result['password_score']} / 50")
+    add(f"Password: {result['password_score']} / 50 ({result['password_level_en']})")
     add(f"Security habits: {result['habit_score']} / 50")
     add(f"Result: {result['grade_en']}")
-    add(f"Habits practiced: {result['yes_count']} / {result['applicable_count']}")
-    add(f"Not sure: {result['unknown_count']} | Not applicable: {result['na_count']}")
+    add(f"Habits practiced: {result['yes_count']} / {result['question_count']}")
     add("Try these first", "Heading2")
-    if result["has_warning"]:
-        add("Please review the test-password issues shown in the app, regardless of the total score.")
     if result["actions"]:
         for i, action in enumerate(result["actions"][:3], 1):
             add(f"{i}. {action[2]}")
@@ -227,153 +240,149 @@ def create_pdf_report(result):
     else:
         add("Keep up your good habits and check your account settings regularly.")
     add("About this check", "Heading2")
-    add("This educational self-check uses a test password and your answers. It does not measure the security of your real accounts or guarantee protection.")
-    add("Scoring: test password 50 points; habits 50 points. Habit score = round(50 x Yes / applicable questions). Not applicable answers are excluded; No and Not sure earn no points.")
-    add("Password scoring: length up to 25; small local common-password list check 10; repeated-character check 5; self-reported absence of personal information 10. Listed common passwords are capped at 10 points. This is not a leaked-password lookup.")
+    add("Password: 5 checks x 10 points (length 8+, no triple repeats, no personal info, "
+        "not a common password, includes number/uppercase/special). "
+        "Habits: round(50 x Yes / 12 questions).")
     add("Your password is not included in this report.")
     doc.build(story)
     pdf_bytes = buffer.getvalue()
     buffer.close()
-    if not pdf_bytes.startswith(b"%PDF-"):
-        raise ValueError("The report could not be created as a PDF.")
     return pdf_bytes
 
 
+# ---------------- 화면 ----------------
 st.title("🔒 개인정보 보호 자가진단")
-st.write("내 보안 습관은 어떨까요? 간단히 확인하고, 오늘부터 바꿀 수 있는 습관을 찾아보세요.")
-st.warning("실제 비밀번호 대신 연습용 비밀번호를 입력해주세요. 가려진 입력값도 서버로 전달돼요.")
-with st.expander("입력한 정보는 어떻게 처리되나요?"):
-    st.write("생년월일과 전화번호는 받지 않아요. 입력한 비밀번호는 앱에서 파일이나 PDF로 저장하지 않지만, 실행 중에는 서버 메모리에 있어요.")
-    st.caption("배포 환경의 로그와 모니터링 설정은 운영자가 별도로 확인해야 해요. 초기화해도 이미 내려받은 파일이나 외부 로그는 지워지지 않아요.")
+st.write("내 비밀번호와 보안 습관은 어떨까요? 간단히 확인하고, 오늘부터 바꿀 수 있는 습관을 찾아보세요.")
+st.caption("입력한 비밀번호는 파일이나 PDF에 저장하지 않아요.")
 st.button("처음부터 다시 하기", on_click=reset_all)
 
-st.header("1. 연습용 비밀번호를 확인해볼까요?")
+# 1. 비밀번호 확인
+st.header("1. 비밀번호를 확인해볼까요?")
 password = st.text_input(
-    "연습용 비밀번호", type="password", key="diag_password",
-    max_chars=256, on_change=invalidate_result,
-    help="실제로 쓰지 않는 비밀번호로 테스트해주세요.",
+    "사용 중인 비밀번호", type="password", key="diag_password",
+    max_chars=256, on_change=invalidate_password,
 )
 personal_status = st.radio(
     "이 비밀번호에 이름이나 생일, 전화번호가 들어 있나요?",
-    PERSONAL_OPTIONS, key="diag_personal", on_change=invalidate_result,
+    PERSONAL_OPTIONS, index=None, horizontal=True,
+    key="diag_personal", on_change=invalidate_password,
 )
-assessment = evaluate_password(password, personal_status)
-if password:
-    st.progress(assessment["score"] / 50)
-    st.write(f"연습용 비밀번호 점수: **{assessment['score']} / 50점**")
-    for label, points, maximum in assessment["checks"]:
-        st.text(f"{'✓' if points == maximum else '•'} {label} · {points}/{maximum}점")
-    for warning in assessment["warnings"]:
-        st.warning(warning)
-    if personal_status == "선택하세요":
-        st.info("개인정보가 들어 있는지도 선택해주세요.")
-    st.caption("이 앱의 목록에 없더라도 안전한 비밀번호라고 단정할 수는 없어요.")
 
-with st.expander("어떤 비밀번호를 만들면 좋을까요?"):
-    st.write("버튼을 누르면 연습용 예시가 나와요. 실제 계정에 쓸 비밀번호는 믿을 수 있는 비밀번호 관리자에서 만들어주세요.")
-    if st.button("예시 만들어보기"):
-        st.session_state["diag_example"] = generate_example()
-    if st.session_state.get("diag_example"):
-        st.code(st.session_state["diag_example"], language=None)
+if st.button("비밀번호 확인하기"):
+    if not password:
+        st.error("비밀번호를 입력해주세요.")
+    elif personal_status is None:
+        st.error("개인정보가 들어 있는지 골라주세요.")
+    else:
+        st.session_state["pw_check"] = evaluate_password(password, personal_status)
 
+pw_check = st.session_state.get("pw_check")
+if pw_check:
+    level, kind = password_level(pw_check["score"])
+    st.progress(pw_check["score"] / 50)
+    st.write(f"비밀번호 점수: **{pw_check['score']} / 50점** · 상태: **{level}**")
+    for c in pw_check["checks"]:
+        st.text(f"{'✓' if c['ok'] else '✗'} {c['label']} · {10 if c['ok'] else 0}/10점")
+
+    if pw_check["score"] == 50:
+        st.success("5가지 조건을 모두 통과했어요! 아래 습관 체크로 넘어가주세요.")
+    else:
+        getattr(st, kind)("보완이 필요한 부분이 있어요. 아래 내용을 참고해서 바꿔보세요.")
+        for c in pw_check["checks"]:
+            if not c["ok"]:
+                st.write(f"- {c['tip']}")
+
+        # 위험하다고 판단될 때만 추천 기능 표시
+        st.subheader("🔑 이런 비밀번호는 어때요?")
+        st.caption("5가지 조건을 모두 통과하는 비밀번호를 만들어드려요.")
+        if st.button("추천 비밀번호 만들기"):
+            st.session_state["diag_example"] = generate_example()
+        if st.session_state.get("diag_example"):
+            st.code(st.session_state["diag_example"], language=None)
+            st.caption("그대로 쓰기보다 나만 기억할 수 있게 조금 바꿔서 사용해보세요.")
+
+# 2. 습관 체크
 st.header("2. 평소 습관을 체크해보세요")
-st.caption("평소 내 모습에 가까운 답을 골라주세요. 이용하지 않는 기능이나 환경은 ‘해당 없음’을 선택하면 돼요.")
 answers = []
-for i, (question, _, _, _, allow_na) in enumerate(QUESTIONS):
-    options = ANSWER_OPTIONS + (["해당 없음"] if allow_na else [])
+for i, (question, *_rest) in enumerate(QUESTIONS):
     answers.append(st.radio(
-        f"{i + 1}. {question}", options, horizontal=True,
+        f"{i + 1}. {question}", ANSWER_OPTIONS, index=None, horizontal=True,
         key=f"diag_q_{i}", on_change=invalidate_result,
     ))
 
 with st.expander("점수는 어떻게 계산하나요?"):
     st.markdown(
-        "- **연습용 비밀번호 50점:** 길이 25점 + 흔한 비밀번호 확인 10점 + 반복 문자 확인 5점 + 개인정보 없음 응답 10점.\n"
-        "- **길이:** 8자 미만 0점 / 8–11자 10점 / 12–15자 20점 / 16자 이상 25점.\n"
-        "- 앱의 흔한 비밀번호 목록에 있으면 비밀번호 점수는 최대 10점이에요.\n"
-        "- **보안 습관 50점:** 해당하는 문항 중 ‘예’라고 답한 비율에 따라 계산해요. 소수점은 반올림해요.\n"
-        "- ‘아니요’와 ‘모름’은 0점이고, ‘해당 없음’은 계산에서 빼요.\n"
-        "- 개인정보 포함 여부는 직접 답한 내용을 반영해요.\n"
-        "- 결과 구간은 80점 이상, 60점 이상, 40점 이상, 40점 미만으로 나눠요.\n"
-        "- 이 점수는 학습을 위한 참고용이에요. 실제 비밀번호의 강도나 해킹 가능성을 측정하지 않아요."
+        "- **비밀번호 50점:** 아래 5가지 조건을 하나 통과할 때마다 10점이에요.\n"
+        "  - 8자 이상\n"
+        "  - 같은 문자나 숫자가 3번 이상 이어지지 않음\n"
+        "  - 개인정보가 들어 있지 않음\n"
+        "  - 흔한 비밀번호 목록에 없음\n"
+        "  - 숫자, 대문자, 특수문자가 모두 들어 있음\n"
+        "- **보안 습관 50점:** 12문항 중 ‘예’라고 답한 비율로 계산해요. 소수점은 반올림해요.\n"
+        "- 결과 구간은 80점 이상, 60점 이상, 40점 이상, 40점 미만으로 나눠요."
     )
 
+# 3. 결과
 if st.button("내 결과 확인하기", type="primary"):
     invalidate_result()
-    if not password:
-        st.error("먼저 연습용 비밀번호를 입력해주세요.")
-    elif personal_status == "선택하세요":
-        st.error("비밀번호에 개인정보가 들어 있는지 선택해주세요.")
-    elif "선택하세요" in answers:
-        missing = [str(i + 1) for i, answer in enumerate(answers) if answer == "선택하세요"]
+    pw_check = st.session_state.get("pw_check")
+    if not pw_check:
+        st.error("먼저 1번에서 ‘비밀번호 확인하기’를 눌러주세요.")
+    elif None in answers:
+        missing = [str(i + 1) for i, a in enumerate(answers) if a is None]
         st.error("아직 답하지 않은 문항이 있어요: " + ", ".join(missing))
     else:
-        # 이전 통과 상태에 의존하지 않고 현재 입력을 다시 평가합니다.
-        assessment = evaluate_password(password, personal_status)
-        applicable_count = sum(answer != "해당 없음" for answer in answers)
         yes_count = answers.count("예")
-        habit_score = round(50 * yes_count / applicable_count) if applicable_count else 0
-        total_score = assessment["score"] + habit_score
+        habit_score = round(50 * yes_count / len(QUESTIONS))
+        total_score = pw_check["score"] + habit_score
         grade_kr, grade_en = grade_for(total_score)
-        actions = list(assessment["actions"])
+        level_kr, _ = password_level(pw_check["score"])
+        level_en = {"안전": "Safe", "주의": "Caution", "위험": "Risky"}[level_kr]
+        actions = [(0, c["tip"], c["tip_en"]) for c in pw_check["checks"] if not c["ok"]]
         for answer, (_, guide_kr, guide_en, priority, _) in zip(answers, QUESTIONS):
-            if answer in {"아니요", "모름"}:
-                prefix = "설정되어 있는지 먼저 확인해보세요. " if answer == "모름" else ""
-                actions.append((priority, prefix + guide_kr, guide_en))
-        actions.sort(key=lambda action: action[0])
-        result = {
-            "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "password_score": assessment["score"], "habit_score": habit_score,
+            if answer == "아니요":
+                actions.append((priority, guide_kr, guide_en))
+        actions.sort(key=lambda a: a[0])
+        st.session_state["diagnosis"] = {
+            "created_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "password_score": pw_check["score"], "password_level": level_kr,
+            "password_level_en": level_en, "habit_score": habit_score,
             "total_score": total_score, "grade_kr": grade_kr, "grade_en": grade_en,
-            "yes_count": yes_count, "applicable_count": applicable_count,
-            "unknown_count": answers.count("모름"), "na_count": answers.count("해당 없음"),
-            "has_warning": bool(assessment["warnings"]),
-            "warnings": assessment["warnings"], "actions": actions,
+            "yes_count": yes_count, "question_count": len(QUESTIONS),
+            "actions": actions,
         }
-        # 결과에는 원문 비밀번호를 복사하거나 저장하지 않습니다.
-        st.session_state["diagnosis"] = result
 
 result = st.session_state.get("diagnosis")
 if result:
     st.divider()
     st.header("3. 나의 점검 결과")
     c1, c2, c3 = st.columns(3)
-    c1.metric("연습용 비밀번호", f"{result['password_score']} / 50")
+    c1.metric("비밀번호", f"{result['password_score']} / 50")
     c2.metric("보안 습관", f"{result['habit_score']} / 50")
     c3.metric("전체 점수", f"{result['total_score']} / 100")
     st.info(result["grade_kr"])
-    st.caption("연습용 비밀번호와 직접 답한 습관을 바탕으로 한 참고용 결과예요. 실제 계정의 안전을 보장하지는 않아요.")
-    st.caption(
-        f"적용 문항 {result['applicable_count']}개 중 실천 {result['yes_count']}개 · "
-        f"모름 {result['unknown_count']}개 · 해당 없음 {result['na_count']}개"
-    )
-    for warning in result["warnings"]:
-        st.warning(warning)
+    st.caption(f"습관 {result['question_count']}개 중 {result['yes_count']}개를 실천하고 있어요.")
+
     st.subheader("💡 이것부터 해보세요")
     if result["actions"]:
         for i, (_, guide_kr, _) in enumerate(result["actions"][:3], 1):
             st.write(f"**{i}.** {guide_kr}")
-        with st.expander("다른 개선 팁도 보기"):
-            for i, (_, guide_kr, _) in enumerate(result["actions"], 1):
-                st.write(f"{i}. {guide_kr}")
+        if len(result["actions"]) > 3:
+            with st.expander("다른 개선 팁도 보기"):
+                for i, (_, guide_kr, _) in enumerate(result["actions"][3:], 4):
+                    st.write(f"{i}. {guide_kr}")
     else:
-        st.success("이번 점검에서 추가로 안내할 항목은 없어요. 지금처럼 좋은 습관을 이어가주세요!")
+        st.success("더 안내할 내용이 없어요. 지금처럼 좋은 습관을 이어가주세요!")
 
     st.subheader("📄 결과를 저장해두세요")
-    st.caption("점수와 개선 팁을 영문 PDF로 저장할 수 있어요. 입력한 비밀번호는 담지 않아요.")
+    st.caption("점수와 개선 팁을 영문 PDF로 저장할 수 있어요. 비밀번호는 담지 않아요.")
     try:
         if "report_pdf" not in st.session_state:
             st.session_state["report_pdf"] = create_pdf_report(result)
         st.download_button(
-            "결과 PDF 내려받기",
-            data=st.session_state["report_pdf"],
+            "결과 PDF 내려받기", data=st.session_state["report_pdf"],
             file_name="security_self_assessment.pdf", mime="application/pdf",
         )
     except Exception as exc:
-        st.error("PDF를 만들지 못했어요. 아래 오류 내용을 확인한 뒤 다시 시도해주세요. 점검 결과는 그대로 남아 있어요.")
-        with st.expander("오류 내용 확인하기"):
-            st.code(f"{type(exc).__name__}: {exc}", language=None)
-            st.caption("수정본의 requirements.txt로 패키지를 설치한 뒤 앱을 다시 실행해주세요.")
-        if st.button("PDF 다시 만들기"):
-            st.session_state.pop("report_pdf", None)
-            st.rerun()
+        st.error("PDF를 만들지 못했어요. requirements.txt에 reportlab이 있는지 확인해주세요.")
+        st.code(f"{type(exc).__name__}: {exc}", language=None)
