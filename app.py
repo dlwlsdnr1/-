@@ -7,9 +7,11 @@ from io import BytesIO
 from xml.sax.saxutils import escape
 
 from reportlab.lib import colors
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.cidfonts import UnicodeCIDFont
 
 st.set_page_config(page_title="개인정보 보호 자가진단", page_icon="🔒")
 
@@ -29,7 +31,7 @@ COMMON_PASSWORDS = {
     "!@#$%^&*", "pass@123", "aa123456", "admin123",
 }
 
-# (질문, 개선 안내, PDF용 영문 안내, 중요도, 해당 없음 허용)
+# (질문, 개선 안내, 영문 안내(지금은 안 씀), 중요도, 해당 없음 허용)
 QUESTIONS = [
     (
         "비밀번호가 유출되거나 다른 사람에게 알려진 것 같으면 바로 바꾸나요?",
@@ -203,47 +205,54 @@ def grade_for(score):
 
 
 def create_pdf_report(result):
-    """점수와 개선 팁만 담은 영문 PDF. 비밀번호는 넣지 않아요."""
+    """점수와 개선 팁만 담은 한글 PDF. 비밀번호는 넣지 않아요."""
+    pdfmetrics.registerFont(UnicodeCIDFont("HYGothic-Medium"))
     buffer = BytesIO()
     doc = SimpleDocTemplate(
         buffer, pagesize=(210 * mm, 297 * mm),
         rightMargin=20 * mm, leftMargin=20 * mm,
         topMargin=20 * mm, bottomMargin=20 * mm,
-        title="My Security Check", author="Privacy Self-Check",
+        title="나의 보안 점검 결과", author="개인정보 보호 자가진단",
     )
-    styles = getSampleStyleSheet()
-    styles.add(ParagraphStyle(
-        name="ReportBody", fontName="Helvetica", fontSize=10,
-        leading=15, spaceAfter=8, textColor=colors.HexColor("#26334D"),
-    ))
+    font = "HYGothic-Medium"
+    styles = {
+        "Title": ParagraphStyle(name="KTitle", fontName=font, fontSize=20,
+                                leading=26, alignment=1, spaceAfter=10),
+        "Heading2": ParagraphStyle(name="KHeading", fontName=font, fontSize=14,
+                                   leading=20, spaceBefore=10, spaceAfter=6,
+                                   textColor=colors.HexColor("#1F4E79")),
+        "ReportBody": ParagraphStyle(name="KBody", fontName=font, fontSize=10,
+                                     leading=16, spaceAfter=6,
+                                     textColor=colors.HexColor("#26334D")),
+    }
     story = []
 
     def add(text, style="ReportBody"):
         story.append(Paragraph(escape(str(text)), styles[style]))
 
-    add("My Security Check", "Title")
-    add(f"Created: {result['created_at']}")
+    add("나의 보안 점검 결과", "Title")
+    add(f"점검 날짜: {result['created_at']}")
     story.append(Spacer(1, 5 * mm))
-    add(f"Total score: {result['total_score']} / 100", "Heading2")
-    add(f"Password: {result['password_score']} / 50 ({result['password_level_en']})")
-    add(f"Security habits: {result['habit_score']} / 50")
-    add(f"Result: {result['grade_en']}")
-    add(f"Habits practiced: {result['yes_count']} / {result['question_count']}")
-    add("Try these first", "Heading2")
+    add(f"전체 점수: {result['total_score']} / 100점", "Heading2")
+    add(f"비밀번호: {result['password_score']} / 50점 ({result['password_level']})")
+    add(f"보안 습관: {result['habit_score']} / 50점")
+    add(f"결과: {result['grade_kr']}")
+    add(f"실천 중인 습관: {result['question_count']}개 중 {result['yes_count']}개")
+    add("이것부터 해보세요", "Heading2")
     if result["actions"]:
         for i, action in enumerate(result["actions"][:3], 1):
-            add(f"{i}. {action[2]}")
+            add(f"{i}. {action[1]}")
         if len(result["actions"]) > 3:
-            add("More tips", "Heading2")
+            add("다른 개선 팁", "Heading2")
             for i, action in enumerate(result["actions"][3:], 4):
-                add(f"{i}. {action[2]}")
+                add(f"{i}. {action[1]}")
     else:
-        add("Keep up your good habits and check your account settings regularly.")
-    add("About this check", "Heading2")
-    add("Password: 5 checks x 10 points (length 8+, no triple repeats, no personal info, "
-        "not a common password, includes number/uppercase/special). "
-        "Habits: round(50 x Yes / 12 questions).")
-    add("Your password is not included in this report.")
+        add("지금처럼 좋은 습관을 이어가고, 가끔 계정 설정을 확인해주세요.")
+    add("점수 계산 방법", "Heading2")
+    add("비밀번호: 5가지 조건(8자 이상, 같은 글자 3번 연속 없음, 개인정보 없음, "
+        "흔한 비밀번호 아님, 숫자·대문자·특수문자 포함)을 하나 통과할 때마다 10점")
+    add("보안 습관: 12문항 중 '예'라고 답한 비율로 50점 만점 계산(반올림)")
+    add("이 결과지에는 비밀번호가 들어 있지 않아요.")
     doc.build(story)
     pdf_bytes = buffer.getvalue()
     buffer.close()
@@ -375,13 +384,13 @@ if result:
         st.success("더 안내할 내용이 없어요. 지금처럼 좋은 습관을 이어가주세요!")
 
     st.subheader("📄 결과를 저장해두세요")
-    st.caption("점수와 개선 팁을 영문 PDF로 저장할 수 있어요. 비밀번호는 담지 않아요.")
+    st.caption("점수와 개선 팁을 PDF로 저장할 수 있어요. 비밀번호는 담지 않아요.")
     try:
         if "report_pdf" not in st.session_state:
             st.session_state["report_pdf"] = create_pdf_report(result)
         st.download_button(
             "결과 PDF 내려받기", data=st.session_state["report_pdf"],
-            file_name="security_self_assessment.pdf", mime="application/pdf",
+            file_name="보안_점검_결과.pdf", mime="application/pdf",
         )
     except Exception as exc:
         st.error("PDF를 만들지 못했어요. requirements.txt에 reportlab이 있는지 확인해주세요.")
